@@ -1,0 +1,11 @@
+dist/*
+docs/*
+embed/*
+ui/out
+ui/build/*
+ui/.next
+ui/node_modules/*
+package-lock.json
+.DS_Store
+coverage.html
+coverage.out

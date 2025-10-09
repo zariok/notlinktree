@@ -1,0 +1,70 @@
+version: '3.8'
+
+networks:
+  test-network:
+    driver: bridge
+
+services:
+  # Build main notlinktree image first
+  notlinktree-build:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        NLT_JWT_SECRET: "testingonly"
+    image: notlinktree:test
+
+  # Main service test
+  notlinktree:
+    build:
+      context: ../..
+      dockerfile: test/docker/Dockerfile.test
+    image: notlinktree:test-runner
+    ports:
+      - "8080:8080"
+    volumes:
+      - test_config:/config
+    environment:
+      - NLT_PORT=8080
+      - NLT_JWT_SECRET=test-secret-for-docker-tests
+    depends_on:
+      - notlinktree-build
+    networks:
+      - test-network
+
+  # Test with local directory mount
+  notlinktree_local:
+    build:
+      context: ../..
+      dockerfile: test/docker/Dockerfile.test
+    image: notlinktree:test-runner-local
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./test_config:/config
+    environment:
+      - NLT_PORT=8080
+      - NLT_JWT_SECRET=test-secret-for-docker-tests
+    depends_on:
+      - notlinktree-build
+    networks:
+      - test-network
+
+  # Integration tests
+  integration_tests:
+    build:
+      context: ../..
+      dockerfile: test/docker/Dockerfile.integration
+    image: notlinktree:test-runner-integration
+    depends_on:
+      notlinktree:
+        condition: service_healthy
+      notlinktree_local:
+        condition: service_healthy
+    volumes:
+      - ./test_config:/test_config
+    networks:
+      - test-network
+
+volumes:
+  test_config: 

@@ -1,0 +1,9 @@
+admin:
+    password: $2a$10$zdw/.V/c5kXydxVqJon75ONi8ZxnR8NU.59tWnfih3s7SigEnw992
+links: {}
+ui:
+    username: "Test User"
+    title: "Test NotLinkTree"
+    primaryColor: "#6D28D9"
+    secondaryColor: "#3B82F6"
+    backgroundColor: "#F3F4F6"

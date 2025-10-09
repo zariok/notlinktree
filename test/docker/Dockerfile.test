@@ -1,0 +1,20 @@
+# Build from the main Dockerfile
+FROM localhost/notlinktree:test
+
+# Switch to root for test setup
+USER root
+
+# Install test dependencies
+RUN apk add --no-cache curl jq
+
+# Copy test scripts
+COPY test/docker/healthcheck.sh /test/
+COPY test/docker/volume_test.sh /test/
+RUN chmod +x /test/*.sh
+
+# Switch back to non-root
+USER notlinktree
+
+# Health check
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=5 \
+    CMD /test/healthcheck.sh 

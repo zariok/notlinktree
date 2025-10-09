@@ -1,0 +1,30 @@
+admin:
+    password: $2a$10$4gFuaVauJrEcRiDRD2cgNea0jOe5X38MsnrImeBu/jGaxn13Zx9pa
+links:
+    98f9b75c247913dd:
+        id: 98f9b75c247913dd
+        title: zariok -dot- me
+        url: https://zariok.me
+        description: ""
+        type: HomePage
+        clicks: 1
+    280bcea624d5977e:
+        id: 280bcea624d5977e
+        title: Github
+        url: https://github.com/zariok
+        description: ""
+        type: GitHub
+        clicks: 1
+    a07e4ce0336132e8:
+        id: a07e4ce0336132e8
+        title: Twitch
+        url: https://twitch.tv/zariok
+        description: ""
+        type: Twitch
+        clicks: 0
+ui:
+    username: notlinktree
+    title: Welcome to NotLinkTree's Links
+    primaryColor: '#6D28D9'
+    secondaryColor: '#3B82F6'
+    backgroundColor: '#F3F4F6'

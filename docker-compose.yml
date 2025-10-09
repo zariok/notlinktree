@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  notlinktree:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - notlinktree_data:/config
+    environment:
+      - NLT_PORT=8080
+      - NLT_JWT_SECRET=${NLT_JWT_SECRET}
+      # Add any other environment variables here
+
+volumes:
+  notlinktree_data:
+    # This creates a named volume. To use a local directory instead,
+    # comment this out and change the volume mapping above to:
+    # - ./config:/config 
