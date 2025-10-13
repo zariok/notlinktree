@@ -1,0 +1,89 @@
+# Build from the main Dockerfile
+FROM golang:1.25.2-alpine AS builder
+
+# Set working directory
+WORKDIR /build
+
+# Copy go mod files
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build the application
+RUN CGO_ENABLED=0 go build -o notlinktree .
+
+# Final stage
+FROM alpine:latest
+
+# Add labels for proper image identification
+LABEL org.opencontainers.image.title="NotLinkTree Integration Test"
+LABEL org.opencontainers.image.description="NotLinkTree integration test container"
+LABEL org.opencontainers.image.vendor="NotLinkTree"
+LABEL org.opencontainers.image.source="https://github.com/zariok/notlinktree"
+LABEL test="true"
+
+# Install ca-certificates for HTTPS requests
+RUN apk --no-cache add ca-certificates
+
+# Create user and group
+RUN addgroup -S notlinktree && \
+    adduser -S notlinktree -G notlinktree
+
+# Create config directory
+RUN mkdir /config && \
+    chown notlinktree:notlinktree /config
+
+# Copy binary from builder stage
+COPY --from=builder /build/notlinktree /usr/local/bin/
+
+# Copy default config
+COPY config.yaml /config/config.yaml.default
+# Copy test config with known password
+COPY test/docker/test_config/config_with_known_password.yaml /config/config.yaml
+
+# Create entrypoint script
+RUN echo '#!/bin/sh' > /usr/local/bin/docker-entrypoint.sh && \
+    echo 'set -e' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '# Set default values' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo 'export NLT_PORT=${NLT_PORT:-8080}' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo 'export NLT_DATA=${NLT_DATA:-/config}' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo 'export NLT_JWT_SECRET=${NLT_JWT_SECRET:-}' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '# The config file should already be available in the mounted directory' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo 'echo "Starting NotLinkTree with config from $NLT_DATA"' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo 'ls -la "$NLT_DATA/"' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '# Start the application' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo 'exec notlinktree' >> /usr/local/bin/docker-entrypoint.sh
+
+# Make entrypoint executable
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+# Set user
+USER notlinktree
+
+# Expose port
+EXPOSE 8080
+
+# Switch to root for test setup
+USER root
+
+# Install test dependencies
+RUN apk add --no-cache curl jq
+
+# Copy test scripts
+COPY test/docker/healthcheck.sh /test/
+COPY test/docker/volume_test.sh /test/
+COPY test/docker/password_test.sh /test/
+RUN chmod +x /test/*.sh
+
+# Switch back to non-root
+USER notlinktree
+
+# Override the entrypoint to run tests instead of the main app
+ENTRYPOINT ["/test/volume_test.sh"]

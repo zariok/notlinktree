@@ -1,0 +1,12 @@
+admin:
+  password: testpass
+links: [
+  - id: 1
+    title: Test
+    url: https://test
+    description: desc
+    type: Other
+    clicks: 0
+ui:
+  username: tester
+  title: Test Title 

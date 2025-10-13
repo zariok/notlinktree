@@ -1,0 +1,100 @@
+version: '3.8'
+
+networks:
+  test-network:
+    driver: bridge
+
+services:
+  # Main service test
+  notlinktree:
+    build:
+      context: ../..
+      dockerfile: test/docker/Dockerfile.test
+    ports:
+      - "8080:8080"
+    volumes:
+      - notlinktree_test_data:/config
+    environment:
+      - NLT_PORT=8080
+      - NLT_DATA=/config
+      - NLT_JWT_SECRET=test-secret-for-docker-tests
+    networks:
+      - test-network
+    healthcheck:
+      test: ["CMD", "/test/healthcheck.sh"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # Test with local directory mount
+  notlinktree_local:
+    build:
+      context: ../..
+      dockerfile: test/docker/Dockerfile.test
+    ports:
+      - "8081:8080"
+    volumes:
+      - notlinktree_local_test_data:/config
+    environment:
+      - NLT_PORT=8080
+      - NLT_DATA=/config
+      - NLT_JWT_SECRET=test-secret-for-docker-tests
+    networks:
+      - test-network
+    healthcheck:
+      test: ["CMD", "/test/healthcheck.sh"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # Password change tests
+  notlinktree_password_test:
+    build:
+      context: ../..
+      dockerfile: test/docker/Dockerfile.test
+    ports:
+      - "8082:8080"
+    volumes:
+      - password_test_data:/config
+    environment:
+      - NLT_PORT=8080
+      - NLT_DATA=/config
+      - NLT_JWT_SECRET=test-secret-for-docker-tests
+    networks:
+      - test-network
+    healthcheck:
+      test: ["CMD", "/test/healthcheck.sh"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # Integration tests
+  integration_tests:
+    build:
+      context: ../..
+      dockerfile: test/docker/Dockerfile.integration
+    depends_on:
+      notlinktree:
+        condition: service_healthy
+      notlinktree_local:
+        condition: service_healthy
+      notlinktree_password_test:
+        condition: service_healthy
+    volumes:
+      - ./test_config:/test_config
+    networks:
+      - test-network
+    environment:
+      - NLT_JWT_SECRET=test-secret-for-docker-tests
+      - INTEGRATION_TEST=1
+
+volumes:
+  notlinktree_test_data:
+    # Isolated volume for main test service
+  notlinktree_local_test_data:
+    # Isolated volume for local test service
+  password_test_data:
+    # Isolated volume for password change tests

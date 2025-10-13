@@ -1,0 +1,10 @@
+dist/*
+docs/*
+embed/*
+ui/out
+ui/build/*
+ui/.next
+ui/node_modules/*
+.DS_Store
+coverage.html
+coverage.out

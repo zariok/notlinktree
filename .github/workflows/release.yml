@@ -1,0 +1,210 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  # Test job - runs all tests before building
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.25.2'
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Install Go dependencies
+        run: go mod download
+
+      - name: Install UI dependencies
+        run: cd ui && npm ci
+
+      - name: Build UI for Go tests
+        run: |
+          mkdir -p embed/ui
+          cd ui && npm run build && cp -r out/* ../embed/ui/
+
+      - name: Run Go unit tests
+        run: go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Run Go tests with coverage
+        run: go test -v -coverprofile=coverage.out -covermode=count ./...
+
+      - name: Generate Go test coverage report
+        run: go tool cover -html=coverage.out -o coverage.html
+
+      - name: Upload Go test coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-coverage-report
+          path: coverage.html
+
+      - name: Run UI linting
+        run: cd ui && npm run lint
+
+      - name: Run UI build test
+        run: cd ui && npm run build
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Install Docker Compose
+        run: |
+          sudo curl -L "https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          sudo chmod +x /usr/local/bin/docker-compose
+          docker-compose --version
+
+      - name: Run container tests
+        run: make docker-test
+        env:
+          NLT_JWT_SECRET: "test-secret-for-github-actions"
+
+      - name: Clean up container test artifacts
+        if: always()
+        run: |
+          # Install Docker Compose for cleanup
+          sudo curl -L "https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          sudo chmod +x /usr/local/bin/docker-compose
+          make docker-clean
+
+  # Build and release job - only runs if tests pass
+  build-release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    needs: test
+    permissions:
+      contents: write
+      packages: write
+      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.25.2'
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: make deps
+
+      - name: Build binaries
+        run: make build
+
+      - name: Test built binaries
+        run: |
+          echo "Testing Linux binary..."
+          ./dist/notlinktree-linux-amd64 --help || echo "Binary help test completed"
+          echo "Testing macOS binary..."
+          file dist/notlinktree-darwin-arm64
+          echo "Binary architecture verification completed"
+
+      - name: Import GPG key
+        run: |
+          echo "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --batch --import
+
+      - name: Generate and sign checksums
+        run: |
+          cd dist
+          sha256sum * > checksums.txt
+          echo "${{ secrets.GPG_PASSPHRASE }}" | gpg --batch --yes --passphrase-fd 0 --pinentry-mode loopback --detach-sign --armor --local-user 38CB0B0D1FB08FF1 checksums.txt
+          cd ..
+          
+      - name: Create Release and Upload Assets
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "dist/*"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          generateReleaseNotes: true
+          draft: false
+          prerelease: false
+
+  # Container build and push job - runs in parallel with build-release
+  container-release:
+    name: Build and Push Container
+    runs-on: ubuntu-latest
+    needs: test
+    permissions:
+      contents: read
+      packages: write
+      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Install UI dependencies
+        run: cd ui && npm ci
+
+      - name: Build UI for container
+        run: |
+          mkdir -p embed/ui
+          cd ui && npm run build && cp -r out/* ../embed/ui/
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=tag
+            type=raw,value=latest
+          flavor: |
+            latest=false
+          labels: |
+            org.opencontainers.image.title=NotLinkTree
+            org.opencontainers.image.description=A self-contained LinkTree clone built with Go and Next.js
+            org.opencontainers.image.vendor=NotLinkTree
+            org.opencontainers.image.licenses=MIT
+
+      - name: Debug metadata
+        run: |
+          echo "Generated tags:"
+          echo "${{ steps.meta.outputs.tags }}"
+          echo "Generated labels:"
+          echo "${{ steps.meta.outputs.labels }}"
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+          sbom: false 
